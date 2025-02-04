@@ -15,7 +15,9 @@ username = os.getenv('DB_USERNAME')
 password = os.getenv('DB_PASSWORD')
 driver = '{ODBC Driver 17 for SQL Server}'
 
-connection_string = f"DRIVER={driver};SERVER={server};DATABASE={database};UID={username};PWD={password};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
+port= 1433
+
+connection_string = f"DRIVER={driver};SERVER={server},{port};DATABASE={database};UID={username};PWD={password};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = f"mssql+pyodbc:///?odbc_connect={connection_string}"
