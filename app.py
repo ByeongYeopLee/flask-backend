@@ -7,7 +7,7 @@ import pyodbc
 from dotenv import load_dotenv
 
 # .env 파일 로드
-load_dotenv("templates/.env")
+load_dotenv()
 
 server = os.getenv('DB_SERVER')
 database = os.getenv('DB_NAME')
