@@ -3,8 +3,8 @@ from flask_restful import Api, Resource
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
-import pyodbc
 from dotenv import load_dotenv
+import pyodbc
 
 # .env 파일 로드
 load_dotenv()
@@ -14,10 +14,11 @@ database = os.getenv('DB_NAME')
 username = os.getenv('DB_USERNAME')
 password = os.getenv('DB_PASSWORD')
 driver = '{ODBC Driver 17 for SQL Server}'
+port = 1433
 
-port= 1433
-
-connection_string = f"DRIVER={driver};SERVER={server},{port};DATABASE={database};UID={username};PWD={password};Encrypt=yes;TrustServerCertificate=yes;Connection Timeout=30;"
+# pyodbc 연결 인코딩 설정
+pyodbc.pooling = False  # 한글 깨짐 방지
+connection_string = f"DRIVER={driver};SERVER={server},{port};DATABASE={database};UID={username};PWD={password};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = f"mssql+pyodbc:///?odbc_connect={connection_string}"
@@ -25,10 +26,14 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 api = Api(app)
 
+# 모델 정의
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
+    nickname = db.Column(db.String(80), unique=True, nullable=False)
+    birthdate = db.Column(db.Date, nullable=False)
+    preference = db.Column(db.String(255), nullable=True)  # 선택사항
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -36,39 +41,65 @@ class User(db.Model):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
+# 데이터베이스 테이블 생성 (첫 실행 시)
 try:
     with app.app_context():
         db.create_all()
 except Exception as e:
     print(f"Error creating database tables: {e}")
 
+# 회원가입 API
 class UserRegistration(Resource):
     def post(self):
         data = request.get_json()
-        username = data['username']
-        password = data['password']
+        username = data.get('username')
+        password = data.get('password')
+        nickname = data.get('nickname')
+        birthdate = data.get('birthdate')  # "YYYY-MM-DD" 형식으로 받기
+        preference = data.get('preference', None)  # 선택사항 (기본값: None)
 
+        # 중복된 사용자 이름이나 닉네임이 있는지 확인
         if User.query.filter_by(username=username).first():
             return {"message": "Username already exists"}, 400
+        if User.query.filter_by(nickname=nickname).first():
+            return {"message": "Nickname already exists"}, 400
 
-        new_user = User(username=username)
+        # 새 사용자 생성
+        new_user = User(username=username, nickname=nickname, birthdate=birthdate, preference=preference)
         new_user.set_password(password)
         db.session.add(new_user)
         db.session.commit()
 
         return {"message": "User created successfully"}, 201
 
+# 로그인 API
 class UserLogin(Resource):
     def post(self):
         data = request.get_json()
         user = User.query.filter_by(username=data['username']).first()
 
         if user and user.check_password(data['password']):
-            return {"message": "Logged in successfully"}, 200
+            return {
+                "message": "Logged in successfully",
+                "user_info": {
+                    "username": user.username,
+                    "nickname": user.nickname,
+                    "birthdate": str(user.birthdate),
+                    "preference": user.preference
+                }
+            }, 200
         return {"message": "Invalid username or password"}, 401
 
+# RESTful API 리소스 추가
 api.add_resource(UserRegistration, '/register')
 api.add_resource(UserLogin, '/login')
 
+# 응답 인코딩을 UTF-8로 설정
+@app.after_request
+def after_request(response):
+    response.headers['Content-Type'] = 'application/json; charset=utf-8'
+    return response
+
+# 서버 실행
 if __name__ == '__main__':
     app.run(debug=True)
