@@ -35,6 +35,7 @@ class User(db.Model):
     nickname = db.Column(db.String(80), unique=True, nullable=False)
     birthyear = db.Column(db.Integer, nullable=False)  # 출생연도
     gender = db.Column(db.String(10), nullable=False)  # 성별
+    marketing_consent = db.Column(db.Boolean, default=False, nullable=False)  # 마케팅 수신 동의 여부
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -60,6 +61,7 @@ class UserRegistration(Resource):
         nickname = data.get('nickname')
         birthyear = data.get('birthyear')  # 출생연도 (YYYY 형식)
         gender = data.get('gender')  # 성별
+        marketing_consent = data.get('marketing_consent', False)  # 기본값 False
 
         # 필수 필드 검증
         if not all([username, password, nickname, birthyear, gender]):
@@ -72,7 +74,7 @@ class UserRegistration(Resource):
             return {"message": "Nickname already exists"}, 400
 
         # 새 사용자 생성
-        new_user = User(username=username, nickname=nickname, birthyear=birthyear, gender=gender)
+        new_user = User(username=username, nickname=nickname, birthyear=birthyear, gender=gender, marketing_consent=marketing_consent)
         new_user.set_password(password)
         db.session.add(new_user)
         db.session.commit()
@@ -93,7 +95,8 @@ class UserLogin(Resource):
                     "username": user.username,
                     "nickname": user.nickname,
                     "birthyear": user.birthyear,
-                    "gender": user.gender
+                    "gender": user.gender,
+                    "marketing_consent": user.marketing_consent  # 반환 추가
                 }
             }, 200
         return {"message": "Invalid username or password"}, 401
