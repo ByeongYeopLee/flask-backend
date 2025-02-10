@@ -21,8 +21,15 @@ port = 1433
 pyodbc.pooling = False  # 한글 깨짐 방지
 connection_string = f"DRIVER={driver};SERVER={server},{port};DATABASE={database};UID={username};PWD={password};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
 
+# 데이터베이스 연결 테스트
+try:
+    with pyodbc.connect(connection_string) as conn:
+        print("✅ Database connected successfully")
+except Exception as e:
+    print(f"❌ Database connection failed: {e}")
+
 app = Flask(__name__)
-CORS(app)  # ✅ CORS 활성화
+CORS(app, origins=["*"])  # 모든 도메인 허용 (운영 환경에서는 특정 도메인만 허용)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = f"mssql+pyodbc:///?odbc_connect={connection_string}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -116,4 +123,4 @@ def after_request(response):
 
 # 서버 실행
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=8000, debug=True)  # ✅ 포트 8000으로 실행
