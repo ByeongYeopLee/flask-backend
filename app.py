@@ -2,7 +2,6 @@ from flask import Flask, request, jsonify
 from flask_restful import Api, Resource
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_cors import CORS  # CORS 추가
 import os
 from dotenv import load_dotenv
 import pyodbc
@@ -21,16 +20,7 @@ port = 1433
 pyodbc.pooling = False  # 한글 깨짐 방지
 connection_string = f"DRIVER={driver};SERVER={server},{port};DATABASE={database};UID={username};PWD={password};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
 
-# 데이터베이스 연결 테스트
-try:
-    with pyodbc.connect(connection_string) as conn:
-        print("✅ Database connected successfully")
-except Exception as e:
-    print(f"❌ Database connection failed: {e}")
-
 app = Flask(__name__)
-CORS(app, origins=["*"])  # 모든 도메인 허용 (운영 환경에서는 특정 도메인만 허용)
-
 app.config['SQLALCHEMY_DATABASE_URI'] = f"mssql+pyodbc:///?odbc_connect={connection_string}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
@@ -123,4 +113,4 @@ def after_request(response):
 
 # 서버 실행
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8000, debug=True)  # ✅ 포트 8000으로 실행
+    app.run(debug=True)
