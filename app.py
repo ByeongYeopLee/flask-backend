@@ -26,7 +26,7 @@ app = Flask(__name__)
 # CORS 설정을 더 구체적으로 지정
 CORS(app, resources={
     r"/*": {
-        "origins": ["http://localhost:3000"],  # React Native 앱의 개발 서버 주소
+        "origins": ["*"],  # 모든 출처 허용 (개발 환경용)
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"]
     }
