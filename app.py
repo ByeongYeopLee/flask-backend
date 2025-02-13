@@ -46,12 +46,22 @@ class User(db.Model):
     nickname = db.Column(db.String(80), unique=True, nullable=False)
     birthyear = db.Column(db.Integer, nullable=False)  # 출생연도
     gender = db.Column(db.String(10), nullable=False)  # 성별
+    marketing_consent = db.Column(db.Boolean, nullable=False, default=False)  # 마케팅 동의 필드 추가
+    preferences = db.Column(db.String(500), nullable=True)  # JSON 문자열로 저장될 preferences
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+    def get_preferences(self):
+        import json
+        return json.loads(self.preferences) if self.preferences else []
+
+    def set_preferences(self, preferences):
+        import json
+        self.preferences = json.dumps(preferences)
 
 
 # 데이터베이스 테이블 생성 (첫 실행 시)
@@ -71,6 +81,8 @@ class UserRegistration(Resource):
         nickname = data.get('nickname')
         birthyear = data.get('birthyear')  # 출생연도 (YYYY 형식)
         gender = data.get('gender')  # 성별
+        marketing_consent = bool(data.get('marketing_consent', 0))  # 0 또는 1을 boolean으로 변환
+        preferences = data.get('preferences', [])  # 기본값 빈 리스트
 
         # 필수 필드 검증
         if not all([username, password, nickname, birthyear, gender]):
@@ -83,8 +95,15 @@ class UserRegistration(Resource):
             return {"message": "Nickname already exists"}, 400
 
         # 새 사용자 생성
-        new_user = User(username=username, nickname=nickname, birthyear=birthyear, gender=gender)
+        new_user = User(
+            username=username,
+            nickname=nickname,
+            birthyear=birthyear,
+            gender=gender,
+            marketing_consent=marketing_consent
+        )
         new_user.set_password(password)
+        new_user.set_preferences(preferences)
         db.session.add(new_user)
         db.session.commit()
 
@@ -104,7 +123,9 @@ class UserLogin(Resource):
                     "username": user.username,
                     "nickname": user.nickname,
                     "birthyear": user.birthyear,
-                    "gender": user.gender
+                    "gender": user.gender,
+                    "marketing_consent": user.marketing_consent,
+                    "preferences": user.get_preferences()
                 }
             }, 200
         return {"message": "Invalid username or password"}, 401
