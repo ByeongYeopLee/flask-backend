@@ -6,6 +6,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import os
 from dotenv import load_dotenv
 import pyodbc
+from datetime import datetime
 
 # .env 파일 로드
 load_dotenv()
@@ -62,6 +63,17 @@ class User(db.Model):
     def set_preferences(self, preferences):
         import json
         self.preferences = json.dumps(preferences)
+
+class TravelSchedule(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # 외래키 (User 모델과 연결)
+    title = db.Column(db.String(255), nullable=False)  # 여행 제목
+    destination = db.Column(db.String(255), nullable=False)  # 여행지
+    start_date = db.Column(db.Date, nullable=False)  # 시작 날짜
+    end_date = db.Column(db.Date, nullable=False)  # 종료 날짜
+    details = db.Column(db.Text, nullable=True)  # 여행 세부 일정 (JSON 가능)
+
+    user = db.relationship('User', backref=db.backref('schedules', lazy=True))  # 관계 설정
 
 
 # 데이터베이스 테이블 생성 (첫 실행 시)
@@ -129,12 +141,152 @@ class UserLogin(Resource):
                 }
             }, 200
         return {"message": "Invalid username or password"}, 401
+    
+# 사용자 정보 조회 및 수정 API
+class UserProfile(Resource):
+    def get(self, username):
+        """특정 사용자 정보 조회"""
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            return {"message": "User not found"}, 404
+
+        return {
+            "username": user.username,
+            "nickname": user.nickname,
+            "birthyear": user.birthyear,
+            "gender": user.gender,
+            "marketing_consent": user.marketing_consent,
+            "preferences": user.get_preferences()
+        }, 200
+
+    def put(self, username):
+        """사용자 정보 수정"""
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            return {"message": "User not found"}, 404
+
+        data = request.get_json()
+
+        # 변경 가능한 필드만 업데이트
+        if 'nickname' in data:
+            if User.query.filter_by(nickname=data['nickname']).first():
+                return {"message": "Nickname already exists"}, 400
+            user.nickname = data['nickname']
+        
+        if 'birthyear' in data:
+            user.birthyear = data['birthyear']
+        
+        if 'gender' in data:
+            user.gender = data['gender']
+        
+        if 'marketing_consent' in data:
+            user.marketing_consent = bool(data['marketing_consent'])
+
+        if 'preferences' in data:
+            user.set_preferences(data['preferences'])
+
+        db.session.commit()
+        return {"message": "User information updated successfully"}, 200
+
+# 여행 일정 API
+class TravelScheduleResource(Resource):
+    def post(self):
+        """여행 일정 추가"""
+        data = request.get_json()
+        username = data.get('username')  # 로그인된 사용자 정보
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            return {"message": "User not found"}, 404
+
+        try:
+            new_schedule = TravelSchedule(
+                user_id=user.id,
+                title=data['title'],
+                destination=data['destination'],
+                start_date=datetime.strptime(data['start_date'], "%Y-%m-%d").date(),
+                end_date=datetime.strptime(data['end_date'], "%Y-%m-%d").date(),
+                details=data.get('details', '')  # 여행 상세 정보 (선택 사항)
+            )
+            db.session.add(new_schedule)
+            db.session.commit()
+            return {"message": "Travel schedule created successfully", "schedule_id": new_schedule.id}, 201
+        except Exception as e:
+            return {"message": str(e)}, 400
+
+    def get(self):
+        """사용자의 여행 일정 조회"""
+        username = request.args.get('username')
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            return {"message": "User not found"}, 404
+
+        schedules = TravelSchedule.query.filter_by(user_id=user.id).all()
+        return [{
+            "id": schedule.id,
+            "title": schedule.title,
+            "destination": schedule.destination,
+            "start_date": schedule.start_date.strftime("%Y-%m-%d"),
+            "end_date": schedule.end_date.strftime("%Y-%m-%d"),
+            "details": schedule.details
+        } for schedule in schedules], 200
+
+
+class TravelScheduleDetailResource(Resource):
+    def get(self, schedule_id):
+        """특정 여행 일정 조회 (로그인한 사용자만 자신의 일정 조회 가능)"""
+        username = request.args.get('username')  # 로그인된 사용자 정보
+        user = User.query.filter_by(username=username).first()
+
+        if not user:
+            return {"message": "User not found"}, 404
+
+        schedule = TravelSchedule.query.get(schedule_id)
+
+        if not schedule:
+            return {"message": "Schedule not found"}, 404
+
+        # 🔒 해당 일정이 로그인한 사용자의 일정인지 확인
+        if schedule.user_id != user.id:
+            return {"message": "Unauthorized access"}, 403
+
+        return {
+            "id": schedule.id,
+            "title": schedule.title,
+            "destination": schedule.destination,
+            "start_date": schedule.start_date.strftime("%Y-%m-%d"),
+            "end_date": schedule.end_date.strftime("%Y-%m-%d"),
+            "details": schedule.details
+        }, 200
+
+
+    def delete(self, schedule_id):
+        """여행 일정 삭제 (로그인한 사용자만 자신의 일정 삭제 가능)"""
+        username = request.args.get('username')  # 로그인된 사용자 정보
+        user = User.query.filter_by(username=username).first()
+
+        if not user:
+            return {"message": "User not found"}, 404
+
+        schedule = TravelSchedule.query.get(schedule_id)
+
+        if not schedule:
+            return {"message": "Schedule not found"}, 404
+
+        # 🔒 해당 일정이 로그인한 사용자의 일정인지 확인
+        if schedule.user_id != user.id:
+            return {"message": "Unauthorized access"}, 403
+
+        db.session.delete(schedule)
+        db.session.commit()
+        return {"message": "Schedule deleted successfully"}, 200
 
 
 # RESTful API 리소스 추가
 api.add_resource(UserRegistration, '/register')
 api.add_resource(UserLogin, '/login')
-
+api.add_resource(UserProfile, '/user/<string:username>')
+api.add_resource(TravelScheduleResource, '/schedule')  # 전체 일정 조회 및 추가
+api.add_resource(TravelScheduleDetailResource, '/schedule/<int:schedule_id>')  # 특정 일정 조회 및 삭제
 
 # 응답 인코딩을 UTF-8로 설정
 @app.after_request

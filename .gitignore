@@ -1,0 +1,14 @@
+# 가상환경
+venv/
+env/
+.venv/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE 설정
+.idea/
+.vscode/
