@@ -264,6 +264,28 @@ class TravelScheduleResource(Resource):
             "generatedScheduleRaw": schedule.generated_schedule_raw
         } for schedule in schedules], 200
 
+    def delete(self, schedule_id):
+        username = request.args.get('username')
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            return {"message": "User not found"}, 404
+
+        schedule = TravelSchedule.query.get(schedule_id)
+        if not schedule:
+            return {"message": "Schedule not found"}, 404
+
+        if schedule.user_id != user.id:
+            return {"message": "Unauthorized access"}, 403
+
+        try:
+            db.session.delete(schedule)
+            db.session.commit()
+            return {"message": "Travel schedule deleted successfully"}, 200
+        except Exception as e:
+            db.session.rollback()
+            return {"message": f"An error occurred while deleting the schedule: {str(e)}"}, 500
+
+
 class TravelScheduleDetailResource(Resource):
     def get(self, schedule_id):
         username = request.args.get('username')
