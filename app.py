@@ -64,16 +64,29 @@ class User(db.Model):
         import json
         self.preferences = json.dumps(preferences)
 
+
+from sqlalchemy.dialects.postgresql import JSON
+
 class TravelSchedule(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # 외래키 (User 모델과 연결)
-    title = db.Column(db.String(255), nullable=False)  # 여행 제목
-    destination = db.Column(db.String(255), nullable=False)  # 여행지
-    start_date = db.Column(db.Date, nullable=False)  # 시작 날짜
-    end_date = db.Column(db.Date, nullable=False)  # 종료 날짜
-    details = db.Column(db.Text, nullable=True)  # 여행 세부 일정 (JSON 가능)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    trip_id = db.Column(db.String(255), unique=True, nullable=False)
+    timestamp = db.Column(db.DateTime, nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    companion = db.Column(db.String(100), nullable=True)
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
+    duration = db.Column(db.String(50), nullable=False)
+    budget = db.Column(db.String(100), nullable=True)
+    transportation = db.Column(JSON, nullable=True)
+    keywords = db.Column(JSON, nullable=True)
+    summary = db.Column(db.Text, nullable=True)
+    days = db.Column(JSON, nullable=False)
+    extra_info = db.Column(JSON, nullable=True)
+    generated_schedule_raw = db.Column(db.Text, nullable=True)
 
-    user = db.relationship('User', backref=db.backref('schedules', lazy=True))  # 관계 설정
+    user = db.relationship('User', backref=db.backref('schedules', lazy=True))
+
 
 
 # 데이터베이스 테이블 생성 (첫 실행 시)
@@ -141,7 +154,8 @@ class UserLogin(Resource):
                 }
             }, 200
         return {"message": "Invalid username or password"}, 401
-    
+
+
 # 사용자 정보 조회 및 수정 API
 class UserProfile(Resource):
     def get(self, username):
@@ -172,13 +186,13 @@ class UserProfile(Resource):
             if User.query.filter_by(nickname=data['nickname']).first():
                 return {"message": "Nickname already exists"}, 400
             user.nickname = data['nickname']
-        
+
         if 'birthyear' in data:
             user.birthyear = data['birthyear']
-        
+
         if 'gender' in data:
             user.gender = data['gender']
-        
+
         if 'marketing_consent' in data:
             user.marketing_consent = bool(data['marketing_consent'])
 
@@ -188,12 +202,15 @@ class UserProfile(Resource):
         db.session.commit()
         return {"message": "User information updated successfully"}, 200
 
+
 # 여행 일정 API
+from datetime import datetime
+import json
+
 class TravelScheduleResource(Resource):
     def post(self):
-        """여행 일정 추가"""
         data = request.get_json()
-        username = data.get('username')  # 로그인된 사용자 정보
+        username = data.get('username')
         user = User.query.filter_by(username=username).first()
         if not user:
             return {"message": "User not found"}, 404
@@ -201,11 +218,20 @@ class TravelScheduleResource(Resource):
         try:
             new_schedule = TravelSchedule(
                 user_id=user.id,
+                trip_id=data['tripId'],
+                timestamp=datetime.strptime(data['timestamp'], "%Y-%m-%dT%H:%M:%SZ"),
                 title=data['title'],
-                destination=data['destination'],
-                start_date=datetime.strptime(data['start_date'], "%Y-%m-%d").date(),
-                end_date=datetime.strptime(data['end_date'], "%Y-%m-%d").date(),
-                details=data.get('details', '')  # 여행 상세 정보 (선택 사항)
+                companion=data.get('companion'),
+                start_date=datetime.strptime(data['startDate'], "%Y-%m-%d").date(),
+                end_date=datetime.strptime(data['endDate'], "%Y-%m-%d").date(),
+                duration=data['duration'],
+                budget=data.get('budget'),
+                transportation=json.dumps(data.get('transportation', [])),
+                keywords=json.dumps(data.get('keywords', [])),
+                summary=data.get('summary'),
+                days=json.dumps(data['days']),
+                extra_info=json.dumps(data.get('extraInfo', {})),
+                generated_schedule_raw=data.get('generatedScheduleRaw')
             )
             db.session.add(new_schedule)
             db.session.commit()
@@ -214,7 +240,6 @@ class TravelScheduleResource(Resource):
             return {"message": str(e)}, 400
 
     def get(self):
-        """사용자의 여행 일정 조회"""
         username = request.args.get('username')
         user = User.query.filter_by(username=username).first()
         if not user:
@@ -223,62 +248,54 @@ class TravelScheduleResource(Resource):
         schedules = TravelSchedule.query.filter_by(user_id=user.id).all()
         return [{
             "id": schedule.id,
+            "tripId": schedule.trip_id,
+            "timestamp": schedule.timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "title": schedule.title,
-            "destination": schedule.destination,
-            "start_date": schedule.start_date.strftime("%Y-%m-%d"),
-            "end_date": schedule.end_date.strftime("%Y-%m-%d"),
-            "details": schedule.details
+            "companion": schedule.companion,
+            "startDate": schedule.start_date.strftime("%Y-%m-%d"),
+            "endDate": schedule.end_date.strftime("%Y-%m-%d"),
+            "duration": schedule.duration,
+            "budget": schedule.budget,
+            "transportation": json.loads(schedule.transportation),
+            "keywords": json.loads(schedule.keywords),
+            "summary": schedule.summary,
+            "days": json.loads(schedule.days),
+            "extraInfo": json.loads(schedule.extra_info),
+            "generatedScheduleRaw": schedule.generated_schedule_raw
         } for schedule in schedules], 200
-
 
 class TravelScheduleDetailResource(Resource):
     def get(self, schedule_id):
-        """특정 여행 일정 조회 (로그인한 사용자만 자신의 일정 조회 가능)"""
-        username = request.args.get('username')  # 로그인된 사용자 정보
+        username = request.args.get('username')
         user = User.query.filter_by(username=username).first()
-
         if not user:
             return {"message": "User not found"}, 404
 
         schedule = TravelSchedule.query.get(schedule_id)
-
         if not schedule:
             return {"message": "Schedule not found"}, 404
 
-        # 🔒 해당 일정이 로그인한 사용자의 일정인지 확인
         if schedule.user_id != user.id:
             return {"message": "Unauthorized access"}, 403
 
         return {
             "id": schedule.id,
+            "tripId": schedule.trip_id,
+            "timestamp": schedule.timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "title": schedule.title,
-            "destination": schedule.destination,
-            "start_date": schedule.start_date.strftime("%Y-%m-%d"),
-            "end_date": schedule.end_date.strftime("%Y-%m-%d"),
-            "details": schedule.details
+            "companion": schedule.companion,
+            "startDate": schedule.start_date.strftime("%Y-%m-%d"),
+            "endDate": schedule.end_date.strftime("%Y-%m-%d"),
+            "duration": schedule.duration,
+            "budget": schedule.budget,
+            "transportation": json.loads(schedule.transportation),
+            "keywords": json.loads(schedule.keywords),
+            "summary": schedule.summary,
+            "days": json.loads(schedule.days),
+            "extraInfo": json.loads(schedule.extra_info),
+            "generatedScheduleRaw": schedule.generated_schedule_raw
         }, 200
 
-
-    def delete(self, schedule_id):
-        """여행 일정 삭제 (로그인한 사용자만 자신의 일정 삭제 가능)"""
-        username = request.args.get('username')  # 로그인된 사용자 정보
-        user = User.query.filter_by(username=username).first()
-
-        if not user:
-            return {"message": "User not found"}, 404
-
-        schedule = TravelSchedule.query.get(schedule_id)
-
-        if not schedule:
-            return {"message": "Schedule not found"}, 404
-
-        # 🔒 해당 일정이 로그인한 사용자의 일정인지 확인
-        if schedule.user_id != user.id:
-            return {"message": "Unauthorized access"}, 403
-
-        db.session.delete(schedule)
-        db.session.commit()
-        return {"message": "Schedule deleted successfully"}, 200
 
 
 # RESTful API 리소스 추가
@@ -287,6 +304,7 @@ api.add_resource(UserLogin, '/login')
 api.add_resource(UserProfile, '/user/<string:username>')
 api.add_resource(TravelScheduleResource, '/schedule')  # 전체 일정 조회 및 추가
 api.add_resource(TravelScheduleDetailResource, '/schedule/<int:schedule_id>')  # 특정 일정 조회 및 삭제
+
 
 # 응답 인코딩을 UTF-8로 설정
 @app.after_request
