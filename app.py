@@ -219,7 +219,7 @@ class TravelScheduleResource(Resource):
             new_schedule = TravelSchedule(
                 user_id=user.id,
                 trip_id=data['tripId'],
-                timestamp=datetime.strptime(data['timestamp'], "%Y-%m-%dT%H:%M:%SZ"),
+                timestamp=datetime.strptime(data['timestamp'], "%Y-%m-%dT%H:%M:%S.%fZ"),
                 title=data['title'],
                 companion=data.get('companion'),
                 start_date=datetime.strptime(data['startDate'], "%Y-%m-%d").date(),
