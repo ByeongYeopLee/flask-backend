@@ -265,13 +265,13 @@ class TravelScheduleResource(Resource):
         } for schedule in schedules], 200
 
 class TravelScheduleDetailResource(Resource):
-    def get(self, schedule_id):
+    def get(self, trip_id):  # schedule_id → trip_id
         username = request.args.get('username')
         user = User.query.filter_by(username=username).first()
         if not user:
             return {"message": "User not found"}, 404
 
-        schedule = TravelSchedule.query.get(schedule_id)
+        schedule = TravelSchedule.query.filter_by(trip_id=trip_id).first()  # trip_id로 조회
         if not schedule:
             return {"message": "Schedule not found"}, 404
 
@@ -279,7 +279,6 @@ class TravelScheduleDetailResource(Resource):
             return {"message": "Unauthorized access"}, 403
 
         return {
-            "id": schedule.id,
             "tripId": schedule.trip_id,
             "timestamp": schedule.timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "title": schedule.title,
@@ -296,13 +295,13 @@ class TravelScheduleDetailResource(Resource):
             "generatedScheduleRaw": schedule.generated_schedule_raw
         }, 200
 
-    def delete(self, schedule_id):
+    def delete(self, trip_id):  # schedule_id → trip_id
         username = request.args.get('username')
         user = User.query.filter_by(username=username).first()
         if not user:
             return {"message": "User not found"}, 404
 
-        schedule = TravelSchedule.query.get(schedule_id)
+        schedule = TravelSchedule.query.filter_by(trip_id=trip_id).first()  # trip_id로 검색
         if not schedule:
             return {"message": "Schedule not found"}, 404
 
@@ -319,12 +318,13 @@ class TravelScheduleDetailResource(Resource):
 
 
 
+
 # RESTful API 리소스 추가
 api.add_resource(UserRegistration, '/register')
 api.add_resource(UserLogin, '/login')
 api.add_resource(UserProfile, '/user/<string:username>')
 api.add_resource(TravelScheduleResource, '/schedule')  # 전체 일정 조회 및 추가
-api.add_resource(TravelScheduleDetailResource, '/schedule/<int:schedule_id>')  # 특정 일정 조회 및 삭제
+api.add_resource(TravelScheduleDetailResource, '/schedule/<string:trip_id>')
 
 
 # 응답 인코딩을 UTF-8로 설정
