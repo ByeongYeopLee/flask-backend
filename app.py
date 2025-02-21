@@ -87,6 +87,25 @@ class TravelSchedule(db.Model):
 
     user = db.relationship('User', backref=db.backref('schedules', lazy=True))
 
+class AdditionalTravelSchedule(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    trip_id = db.Column(db.String(255), unique=True, nullable=False)
+    timestamp = db.Column(db.DateTime, nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    companion = db.Column(db.String(100), nullable=True)
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
+    duration = db.Column(db.String(50), nullable=False)
+    budget = db.Column(db.String(100), nullable=True)
+    transportation = db.Column(JSON, nullable=True)
+    keywords = db.Column(JSON, nullable=True)
+    summary = db.Column(db.Text, nullable=True)
+    days = db.Column(JSON, nullable=False)
+    extra_info = db.Column(JSON, nullable=True)
+    generated_schedule_raw = db.Column(db.Text, nullable=True)
+
+    user = db.relationship('User', backref=db.backref('additional_schedules', lazy=True))
 
 
 # 데이터베이스 테이블 생성 (첫 실행 시)
@@ -317,6 +336,116 @@ class TravelScheduleDetailResource(Resource):
             return {"message": f"An error occurred while deleting the schedule: {str(e)}"}, 500
 
 
+class AdditionalTravelScheduleResource(Resource):
+    def post(self):
+        data = request.get_json()
+        username = data.get('username')
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            return {"message": "User not found"}, 404
+
+        try:
+            new_schedule = AdditionalTravelSchedule(
+                user_id=user.id,
+                trip_id=data['tripId'],
+                timestamp=datetime.strptime(data['timestamp'], "%Y-%m-%dT%H:%M:%S.%fZ"),
+                title=data['title'],
+                companion=data.get('companion'),
+                start_date=datetime.strptime(data['startDate'], "%Y-%m-%d").date(),
+                end_date=datetime.strptime(data['endDate'], "%Y-%m-%d").date(),
+                duration=data['duration'],
+                budget=data.get('budget'),
+                transportation=json.dumps(data.get('transportation', [])),
+                keywords=json.dumps(data.get('keywords', [])),
+                summary=data.get('summary'),
+                days=json.dumps(data['days']),
+                extra_info=json.dumps(data.get('extraInfo', {})),
+                generated_schedule_raw=data.get('generatedScheduleRaw')
+            )
+            db.session.add(new_schedule)
+            db.session.commit()
+            return {"message": "Additional travel schedule created successfully", "schedule_id": new_schedule.id}, 201
+        except Exception as e:
+            return {"message": str(e)}, 400
+
+    def get(self):
+        username = request.args.get('username')
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            return {"message": "User not found"}, 404
+
+        schedules = AdditionalTravelSchedule.query.filter_by(user_id=user.id).all()
+        return [{
+            "id": schedule.id,
+            "tripId": schedule.trip_id,
+            "timestamp": schedule.timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "title": schedule.title,
+            "companion": schedule.companion,
+            "startDate": schedule.start_date.strftime("%Y-%m-%d"),
+            "endDate": schedule.end_date.strftime("%Y-%m-%d"),
+            "duration": schedule.duration,
+            "budget": schedule.budget,
+            "transportation": json.loads(schedule.transportation),
+            "keywords": json.loads(schedule.keywords),
+            "summary": schedule.summary,
+            "days": json.loads(schedule.days),
+            "extraInfo": json.loads(schedule.extra_info),
+            "generatedScheduleRaw": schedule.generated_schedule_raw
+        } for schedule in schedules], 200
+
+class AdditionalTravelScheduleDetailResource(Resource):
+    def get(self, trip_id):
+        username = request.args.get('username')
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            return {"message": "User not found"}, 404
+
+        schedule = AdditionalTravelSchedule.query.filter_by(trip_id=trip_id).first()
+        if not schedule:
+            return {"message": "Schedule not found"}, 404
+
+        if schedule.user_id != user.id:
+            return {"message": "Unauthorized access"}, 403
+
+        return {
+            "tripId": schedule.trip_id,
+            "timestamp": schedule.timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "title": schedule.title,
+            "companion": schedule.companion,
+            "startDate": schedule.start_date.strftime("%Y-%m-%d"),
+            "endDate": schedule.end_date.strftime("%Y-%m-%d"),
+            "duration": schedule.duration,
+            "budget": schedule.budget,
+            "transportation": json.loads(schedule.transportation),
+            "keywords": json.loads(schedule.keywords),
+            "summary": schedule.summary,
+            "days": json.loads(schedule.days),
+            "extraInfo": json.loads(schedule.extra_info),
+            "generatedScheduleRaw": schedule.generated_schedule_raw
+        }, 200
+
+    def delete(self, trip_id):
+        username = request.args.get('username')
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            return {"message": "User not found"}, 404
+
+        schedule = AdditionalTravelSchedule.query.filter_by(trip_id=trip_id).first()
+        if not schedule:
+            return {"message": "Schedule not found"}, 404
+
+        if schedule.user_id != user.id:
+            return {"message": "Unauthorized access"}, 403
+
+        try:
+            db.session.delete(schedule)
+            db.session.commit()
+            return {"message": "Additional travel schedule deleted successfully"}, 200
+        except Exception as e:
+            db.session.rollback()
+            return {"message": f"An error occurred while deleting the schedule: {str(e)}"}, 500
+
+
 
 
 # RESTful API 리소스 추가
@@ -325,6 +454,8 @@ api.add_resource(UserLogin, '/login')
 api.add_resource(UserProfile, '/user/<string:username>')
 api.add_resource(TravelScheduleResource, '/schedule')  # 전체 일정 조회 및 추가
 api.add_resource(TravelScheduleDetailResource, '/schedule/<string:trip_id>')
+api.add_resource(AdditionalTravelScheduleResource, '/additional_schedule')
+api.add_resource(AdditionalTravelScheduleDetailResource, '/additional_schedule/<string:trip_id>')
 
 
 # 응답 인코딩을 UTF-8로 설정
