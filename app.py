@@ -108,7 +108,7 @@ class AdditionalTravelSchedule(db.Model):
     user = db.relationship('User', backref=db.backref('additional_schedules', lazy=True))
 
 # 피드백 테이블 정의
-class Feedback(db.Model):
+class Feedback2(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     schedule_id = db.Column(db.String(255), db.ForeignKey('travel_schedule.id'), nullable=False)  # <-- `String(255)`으로 변경
@@ -469,7 +469,7 @@ class FeedbackResource(Resource):
         if not all([user_id, schedule_id, rating]):
             return {"message": "Missing required fields"}, 400
 
-        new_feedback = Feedback(
+        new_feedback = Feedback2(
             user_id=user_id,
             schedule_id=schedule_id,
             rating=rating,
