@@ -107,6 +107,17 @@ class AdditionalTravelSchedule(db.Model):
 
     user = db.relationship('User', backref=db.backref('additional_schedules', lazy=True))
 
+# 피드백 테이블 정의
+class Feedback(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    schedule_id = db.Column(db.Integer, db.ForeignKey('travel_schedule.id'), nullable=False)
+    rating = db.Column(db.Integer, nullable=False)  # 별점
+    deduction = db.Column(db.Integer, nullable=True)  # 감점
+    comment = db.Column(db.Text, nullable=True)  # 자유 피드백
+
+    user = db.relationship('User', backref=db.backref('feedbacks', lazy=True))
+    schedule = db.relationship('TravelSchedule', backref=db.backref('feedbacks', lazy=True))
 
 # 데이터베이스 테이블 생성 (첫 실행 시)
 try:
@@ -445,7 +456,45 @@ class AdditionalTravelScheduleDetailResource(Resource):
             db.session.rollback()
             return {"message": f"An error occurred while deleting the schedule: {str(e)}"}, 500
 
+# 피드백 API
+class FeedbackResource(Resource):
+    def post(self):
+        data = request.get_json()
+        user_id = data.get('user_id')
+        schedule_id = data.get('schedule_id')
+        rating = data.get('rating')
+        deduction = data.get('deduction')
+        comment = data.get('comment')
 
+        if not all([user_id, schedule_id, rating]):
+            return {"message": "Missing required fields"}, 400
+
+        new_feedback = Feedback(
+            user_id=user_id,
+            schedule_id=schedule_id,
+            rating=rating,
+            deduction=deduction,
+            comment=comment
+        )
+        db.session.add(new_feedback)
+        db.session.commit()
+
+        return {"message": "Feedback added successfully"}, 201
+
+    def get(self):
+        schedule_id = request.args.get('schedule_id')
+        if not schedule_id:
+            return {"message": "Schedule ID is required"}, 400
+
+        feedbacks = Feedback.query.filter_by(schedule_id=schedule_id).all()
+        return [{
+            "id": feedback.id,
+            "user_id": feedback.user_id,
+            "schedule_id": feedback.schedule_id,
+            "rating": feedback.rating,
+            "deduction": feedback.deduction,
+            "comment": feedback.comment
+        } for feedback in feedbacks], 200
 
 
 # RESTful API 리소스 추가
@@ -456,7 +505,7 @@ api.add_resource(TravelScheduleResource, '/schedule')  # 전체 일정 조회 �
 api.add_resource(TravelScheduleDetailResource, '/schedule/<string:trip_id>')
 api.add_resource(AdditionalTravelScheduleResource, '/additional_schedule')
 api.add_resource(AdditionalTravelScheduleDetailResource, '/additional_schedule/<string:trip_id>')
-
+api.add_resource(FeedbackResource, '/feedback')
 
 # 응답 인코딩을 UTF-8로 설정
 @app.after_request
