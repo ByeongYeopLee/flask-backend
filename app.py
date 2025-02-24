@@ -111,7 +111,7 @@ class AdditionalTravelSchedule(db.Model):
 class Feedback(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    schedule_id = db.Column(db.Integer, db.ForeignKey('travel_schedule.id'), nullable=False)
+    schedule_id = db.Column(db.String(255), db.ForeignKey('travel_schedule.id'), nullable=False)  # <-- `String(255)`으로 변경
     rating = db.Column(db.Integer, nullable=False)  # 별점
     deduction = db.Column(db.Integer, nullable=True)  # 감점
     comment = db.Column(db.Text, nullable=True)  # 자유 피드백
