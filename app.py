@@ -107,17 +107,12 @@ class AdditionalTravelSchedule(db.Model):
 
     user = db.relationship('User', backref=db.backref('additional_schedules', lazy=True))
 
-# 피드백 테이블 정의
-class Feedback2(db.Model):
+class Feedback(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    schedule_id = db.Column(db.String(255), db.ForeignKey('travel_schedule.id'), nullable=False)  # <-- `String(255)`으로 변경
     rating = db.Column(db.Integer, nullable=False)  # 별점
     deduction = db.Column(db.Integer, nullable=True)  # 감점
-    comment = db.Column(db.Text, nullable=True)  # 자유 피드백
+    comment = db.Column(db.String(1000), nullable=True)  # 자유롭게 기재할 수 있는 피드백
 
-    user = db.relationship('User', backref=db.backref('feedbacks', lazy=True))
-    schedule = db.relationship('TravelSchedule', backref=db.backref('feedbacks', lazy=True))
 
 # 데이터베이스 테이블 생성 (첫 실행 시)
 try:
@@ -456,41 +451,38 @@ class AdditionalTravelScheduleDetailResource(Resource):
             db.session.rollback()
             return {"message": f"An error occurred while deleting the schedule: {str(e)}"}, 500
 
-# 피드백 API
+# 피드백 추가 API
 class FeedbackResource(Resource):
     def post(self):
         data = request.get_json()
-        user_id = data.get('user_id')
-        schedule_id = data.get('schedule_id')
         rating = data.get('rating')
         deduction = data.get('deduction')
         comment = data.get('comment')
 
-        if not all([user_id, schedule_id, rating]):
-            return {"message": "Missing required fields"}, 400
+        # 별점은 1에서 5까지, 감점은 0 이상으로 제한
+        if not (1 <= rating <= 5):
+            return {"message": "Rating must be between 1 and 5"}, 400
+        if deduction and deduction < 0:
+            return {"message": "Deduction must be a non-negative number"}, 400
 
-        new_feedback = Feedback2(
-            user_id=user_id,
-            schedule_id=schedule_id,
-            rating=rating,
-            deduction=deduction,
-            comment=comment
-        )
-        db.session.add(new_feedback)
-        db.session.commit()
-
-        return {"message": "Feedback added successfully"}, 201
+        try:
+            # 새로운 피드백 생성
+            new_feedback = Feedback(
+                rating=rating,
+                deduction=deduction,
+                comment=comment
+            )
+            db.session.add(new_feedback)
+            db.session.commit()
+            return {"message": "Feedback added successfully", "feedback_id": new_feedback.id}, 201
+        except Exception as e:
+            return {"message": str(e)}, 400
 
     def get(self):
-        schedule_id = request.args.get('schedule_id')
-        if not schedule_id:
-            return {"message": "Schedule ID is required"}, 400
-
-        feedbacks = Feedback.query.filter_by(schedule_id=schedule_id).all()
+        # 모든 피드백 조회
+        feedbacks = Feedback.query.all()
         return [{
             "id": feedback.id,
-            "user_id": feedback.user_id,
-            "schedule_id": feedback.schedule_id,
             "rating": feedback.rating,
             "deduction": feedback.deduction,
             "comment": feedback.comment
