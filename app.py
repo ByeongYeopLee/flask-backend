@@ -114,17 +114,6 @@ class Feedback(db.Model):
     comment = db.Column(db.String(1000), nullable=True)  # 자유롭게 기재할 수 있는 피드백
 
 
-# 모델 정의
-class Photo(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    photo_uri = db.Column(db.String(255), nullable=False)
-    location = db.Column(db.String(255), nullable=True)
-    timestamp = db.Column(db.DateTime, nullable=False)
-
-    user = db.relationship('User', backref=db.backref('photos', lazy=True))
-
-
 # 데이터베이스 테이블 생성 (첫 실행 시)
 try:
     with app.app_context():
@@ -499,45 +488,6 @@ class FeedbackResource(Resource):
             "comment": feedback.comment
         } for feedback in feedbacks], 200
 
-class PhotoResource(Resource):
-    def post(self):
-        data = request.get_json()
-        username = data.get('username')
-        photo_uri = data.get('photoUri')
-        location = data.get('location')
-        timestamp = data.get('timestamp')
-
-        user = User.query.filter_by(username=username).first()
-        if not user:
-            return {"message": "User not found"}, 404
-
-        try:
-            # 새로운 사진 정보 저장
-            new_photo = Photo(
-                user_id=user.id,
-                photo_uri=photo_uri,
-                location=location,
-                timestamp=datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
-            )
-            db.session.add(new_photo)
-            db.session.commit()
-            return {"message": "Photo saved successfully", "photo_id": new_photo.id}, 201
-        except Exception as e:
-            return {"message": str(e)}, 400
-
-    def get(self):
-        username = request.args.get('username')
-        user = User.query.filter_by(username=username).first()
-        if not user:
-            return {"message": "User not found"}, 404
-
-        photos = Photo.query.filter_by(user_id=user.id).all()
-        return [{
-            "id": photo.id,
-            "photoUri": photo.photo_uri,
-            "location": photo.location,
-            "timestamp": photo.timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
-        } for photo in photos], 200
 
 # RESTful API 리소스 추가
 api.add_resource(UserRegistration, '/register')
@@ -548,7 +498,6 @@ api.add_resource(TravelScheduleDetailResource, '/schedule/<string:trip_id>')
 api.add_resource(AdditionalTravelScheduleResource, '/additional_schedule')
 api.add_resource(AdditionalTravelScheduleDetailResource, '/additional_schedule/<string:trip_id>')
 api.add_resource(FeedbackResource, '/feedback')
-api.add_resource(PhotoResource, '/photos')
 
 # 응답 인코딩을 UTF-8로 설정
 @app.after_request
