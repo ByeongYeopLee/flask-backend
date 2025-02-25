@@ -49,16 +49,6 @@ class User(db.Model):
     gender = db.Column(db.String(10), nullable=False)  # 성별
     marketing_consent = db.Column(db.Boolean, nullable=False, default=False)  # 마케팅 동의 필드 추가
     preferences = db.Column(db.String(500), nullable=True)  # JSON 문자열로 저장될 preferences
-    music_genres = db.Column(db.String(500), nullable=True)  # JSON 문자열로 저장될 music_genres
-
-    # music_genres를 위한 getter와 setter 메서드 추가
-    def get_music_genres(self):
-        import json
-        return json.loads(self.music_genres) if self.music_genres else []
-
-    def set_music_genres(self, genres):
-        import json
-        self.music_genres = json.dumps(genres)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -154,7 +144,6 @@ class UserRegistration(Resource):
         gender = data.get('gender')  # 성별
         marketing_consent = bool(data.get('marketing_consent', 0))  # 0 또는 1을 boolean으로 변환
         preferences = data.get('preferences', [])  # 기본값 빈 리스트
-        music_genres = data.get('music_genres', [])
 
         # 필수 필드 검증
         if not all([username, password, nickname, birthyear, gender]):
@@ -176,7 +165,6 @@ class UserRegistration(Resource):
         )
         new_user.set_password(password)
         new_user.set_preferences(preferences)
-        new_user.set_music_genres(music_genres)
         db.session.add(new_user)
         db.session.commit()
 
@@ -199,7 +187,6 @@ class UserLogin(Resource):
                     "gender": user.gender,
                     "marketing_consent": user.marketing_consent,
                     "preferences": user.get_preferences()
-                    "music_genres": user.get_music_genres()
                 }
             }, 200
         return {"message": "Invalid username or password"}, 401
@@ -220,7 +207,6 @@ class UserProfile(Resource):
             "gender": user.gender,
             "marketing_consent": user.marketing_consent,
             "preferences": user.get_preferences()
-            "music_genres": user.get_music_genres()
         }, 200
 
     def put(self, username):
@@ -248,9 +234,6 @@ class UserProfile(Resource):
 
         if 'preferences' in data:
             user.set_preferences(data['preferences'])
-
-        if 'music_genres' in data:
-            user.set_music_genres(data['music_genres'])
 
         db.session.commit()
         return {"message": "User information updated successfully"}, 200
